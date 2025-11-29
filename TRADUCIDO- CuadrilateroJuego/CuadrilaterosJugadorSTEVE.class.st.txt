@@ -1,0 +1,23 @@
+"
+Subclase de jugador
+--STEVE--
+*Tiene la misma vida
+*Solo pone figuras cuadradas (base = altura)
+"
+Class {
+	#name : #JugadorCuadrilaterosSteve,
+	#superclass : #JugadorCuadrilateros,
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #'game logic' }
+JugadorCuadrilaterosSteve >> tirarDadosCon: unDado [
+    "Sobreescribe el metodo para forzar que X=Y, solo tiramos el dado una vez."
+    | valor |
+    
+    "Tiramos el dado aplicando los modificadores de efectos."
+    valor := unDado generarValor: self configuracionDado.
+    
+    "El resultado es un Point (X@Y) donde X e Y son iguales"
+    ^ valor @ valor
+]

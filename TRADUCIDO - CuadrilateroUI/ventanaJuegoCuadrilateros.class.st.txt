@@ -1,0 +1,396 @@
+"
+Esta es la interfaz completa. Solo maneja los eventos de mouse.
+"
+Class {
+	#name : #VentanaJuegoCuadrilateros,
+	#superclass : #SystemWindow,
+	#instVars : [
+		'juego',                 "Anteriormente 'game'"
+		'tableroMorph',          "Anteriormente 'boardMorph'"
+		'panelInfo',             "Anteriormente 'infoPanel'"
+		'labelDados',            "Anteriormente 'diceLabel'"
+		'labelMensaje',          "Anteriormente 'messageLabel'"
+		'tiradaActual',          "Anteriormente 'currentDiceRoll'"
+		'tamCelda',              "Anteriormente 'cellSize'"
+		'fantasmaMorph',         "Anteriormente 'ghostMorph'"
+		'panelEstadisticas'      "Anteriormente 'playerStatsMorph'"
+	],
+	#category : #'Cuadrilateros-UI'
+}
+
+{ #category : #building }
+VentanaJuegoCuadrilateros >> construirUI [
+    | contenedorPrincipal botonSaltar |
+    
+    contenedorPrincipal := Morph new 
+        layoutPolicy: TableLayout new;
+        listDirection: #leftToRight;
+        color: Color transparent;
+        hResizing: #spaceFill;
+        vResizing: #spaceFill;
+        cellInset: 10.
+        
+    self addMorph: contenedorPrincipal frame: (0@0 extent: 1@1).
+    "1. Tablero"
+    tableroMorph := Morph new
+        color: Color darkGray;
+        borderColor: Color black;
+        borderWidth: 2.
+        
+    "2. Panel de Información"
+    panelInfo := Morph new
+        layoutPolicy: TableLayout new;
+        listDirection: #topToBottom;
+        color: Color white;
+        width: 250;
+        vResizing: #spaceFill;
+        cellInset: 10;
+        layoutInset: 10.
+        
+    labelDados := StringMorph new contents: 'DADOS: ...';
+        font: (TextStyle default fontOfSize: 18).
+    labelMensaje := TextMorph new contents: 'Bienvenido'; extent: 200@100; wrapFlag: true.
+    panelInfo addMorph: (StringMorph new contents: 'ESTADO DEL JUEGO'; font: (TextStyle default fontOfSize: 14)).
+    panelInfo addMorph: labelDados.
+    panelInfo addMorph: labelMensaje.
+
+    "--- Panel de Estadísticas de Jugadores ---"
+    panelInfo addMorph: (StringMorph new contents: 'ESTADÍSTICAS'; font: (TextStyle default fontOfSize: 14)). 
+    panelEstadisticas := Morph new
+        layoutPolicy: TableLayout new;
+        listDirection: #topToBottom;
+        color: Color transparent;
+        hResizing: #spaceFill;
+        vResizing: #shrinkWrap;
+        cellInset: 5;
+        yourself.
+    panelInfo addMorph: panelEstadisticas.
+    "-------------------------------------------------"
+
+    "--- BOTÓN DE SALTAR TURNO ---"
+    botonSaltar := SimpleButtonMorph new.
+    botonSaltar label: 'SALTAR TURNO (-1 Vida)'.
+    botonSaltar color: (Color red alpha: 0.7).
+    botonSaltar target: self. 
+    botonSaltar actionSelector: #accionSaltarTurno.
+    botonSaltar extent: 200@40.
+    
+    panelInfo addMorph: botonSaltar.
+    "------------------------------------"
+    
+    contenedorPrincipal addMorph: tableroMorph.
+    contenedorPrincipal addMorph: panelInfo.
+    
+    self crearCeldasGrilla.
+]
+
+{ #category : #events }
+VentanaJuegoCuadrilateros >> celdaClickeada: unEvento desde: unaCelda [ 
+    | puntoClickeado exito jugador |
+    
+    juego esJuegoTerminado ifTrue: [ ^ self ].
+    puntoClickeado := unaCelda columna @ unaCelda fila.
+    
+    jugador := juego jugadorActual. 
+    exito := juego intentarColocarFigura: tiradaActual en: puntoClickeado.
+    
+    exito ifTrue: [
+        
+        "*** LLAMADA AL OVERLAY (Pausa y efecto visual) ***"
+        self mostrarOverlayPowerUpPara: jugador.
+        
+        labelMensaje contents: '¡Jugada exitosa! Turno siguiente.'.
+        
+        self actualizarVista. 
+        self world displayWorld. 
+        
+        "*** LIMPIEZA SELECTIVA: Usa Polimorfismo para eliminar PowerUps instantáneos ***"
+        jugador obtenerEfectosActivos removeAllSuchThat: [ :pu |
+            pu esEfectoInstantaneo
+        ].
+        
+        juego siguienteTurno. 
+        
+        self tirarDadosParaSiguienteTurno.
+        self actualizarVista. 
+        self chequearVictoria.
+    ] ifFalse: [
+        labelMensaje contents: 'Movimiento INVÁLIDO.
+        Revisa adyacencia o espacio.'. 
+        ].
+ 
+]
+
+{ #category : #'game logic' }
+VentanaJuegoCuadrilateros >> chequearVictoria [
+	| ganador colorGanador morphVictoria textoGanador idGanador |
+	juego esJuegoTerminado
+		ifFalse: [ ^ self ].
+        
+	ganador := juego obtenerGanador.
+    idGanador := ganador id.
+    
+    "Llamada al método de CLASE en CeldaCuadrilaterosMorph para obtener el color de forma centralizada"
+	colorGanador := CeldaCuadrilaterosMorph colorParaJugadorId: idGanador. 
+    
+    "1. Actualizar etiquetas inferiores (GAME OVER)"
+    labelMensaje contents: 'GAME OVER. Ganador: Jugador ', idGanador asString.
+    labelDados contents: '---'.
+    
+    "2. Crear el Morph de victoria que cubrirá toda la ventana"
+    morphVictoria := Morph new
+        color: (Color black alpha: 0.8); "Fondo oscuro semi-transparente"
+        bounds: self bounds; "Abarca toda la ventana"
+        yourself.
+
+    "3. Texto grande y coloreado"
+    textoGanador := 'El GANADOR es el JUGADOR ', idGanador asString.
+
+    morphVictoria addMorph: (TextMorph new 
+        contents: textoGanador;
+        font: (TextStyle default fontOfSize: 48); "Fuente grande para prominencia"
+        color: colorGanador; "Color del jugador ganador"
+        yourself).
+        
+    "4. Centrar el texto en la pantalla y añadir el morph a la ventana"
+    morphVictoria submorphs first center: morphVictoria center.
+    self addMorph: morphVictoria.
+]
+
+{ #category : #drawing }
+VentanaJuegoCuadrilateros >> crearCeldasGrilla [
+    | filas columnas celda |
+    filas := juego tablero obtenerFilas.
+    columnas := juego tablero obtenerColumnas.
+    
+    tableroMorph removeAllMorphs.
+    tableroMorph extent: (columnas * tamCelda) @ (filas * tamCelda).
+    
+    "1. Crear las celdas normales"
+    1 to: filas do: [ :r |
+        1 to: columnas do: [ :c |
+            celda := CeldaCuadrilaterosMorph new.
+            celda extent: tamCelda@tamCelda.
+            celda position: tableroMorph position + (((c - 1) * tamCelda) @ ((r - 1) * tamCelda)).
+            celda fila: r columna: c.
+            celda on: #mouseDown send: #celdaClickeada:desde: to: self.
+            tableroMorph addMorph: celda.
+        ].
+    ].
+
+
+    "3. Crear el Fantasma visual"
+    fantasmaMorph := BorderedMorph new.
+    fantasmaMorph color: (Color purple alpha: 0.5); "Semi-transparente"
+    fantasmaMorph borderColor: Color purple;
+    fantasmaMorph borderWidth: 2;
+    fantasmaMorph lock. "CRUCIAL: Hace que los clicks atraviesen el fantasma y lleguen a la celda"
+    
+    tableroMorph addMorph: fantasmaMorph.
+    
+    "Ajustar tamaño inicial"
+    self actualizarTamanioFantasma.
+]
+
+{ #category : #accessing }
+VentanaJuegoCuadrilateros >> panelInfo [ 
+    "Devuelve el panel de información (Morph) para su manipulación."
+    ^ panelInfo
+
+]
+
+{ #category : #private }
+VentanaJuegoCuadrilateros >> ejecutarSaltarTurno [
+    "Lógica centralizada para el botón Saltar Turno"
+    
+    juego esJuegoTerminado ifTrue: [ ^ self ].
+    
+    labelMensaje contents: 'Te rendiste. Pierdes 1 vida.'.
+    
+    "Llamamos al método centralizado de Juego para perder vida y pasar turno"
+    juego jugadorNoPuedeMover.
+    self tirarDadosParaSiguienteTurno.
+    self actualizarVista.
+    self chequearVictoria.
+]
+
+{ #category : #initialization }
+VentanaJuegoCuadrilateros >> inicializarConJuego: unJuego [
+    self initialize.
+    juego := unJuego.
+    tamCelda := 25. "Tamaño en pixeles de cada celda"
+    
+    self setLabel: 'Cuadriláteros - Pharo Game'.
+    self extent: 800@650.
+    
+    "Configuramos el dado inicial"
+    tiradaActual := juego tirarDadoJugadorActual.
+    
+    self construirUI.
+    self actualizarVista.
+]
+
+{ #category : #'game logic' }
+VentanaJuegoCuadrilateros >> tirarDadosParaSiguienteTurno [
+	juego esJuegoTerminado
+		ifTrue: [ ^ self ].
+	tiradaActual := juego tirarDadoJugadorActual.
+	self actualizarTamanioFantasma	"ajusta el tamaño de la figura fantasma"
+]
+
+{ #category : #drawing }
+VentanaJuegoCuadrilateros >> mostrarOverlayPowerUpPara: unJugador [ 
+    "Muestra un overlay grande y blanco con los PowerUps recién adquiridos, y pausa la ejecución."
+    | pusAdquiridos mensajeTexto colorJugador morphOverlay morphTexto rectObjetivo |
+    
+    unJugador obtenerEfectosActivos ifEmpty: [ ^ self ].
+    
+    "1. Obtener la lista de PowerUps y generar el texto grande"
+    pusAdquiridos := unJugador obtenerEfectosActivos.
+    
+    mensajeTexto := String streamContents: [ :stream |
+        pusAdquiridos withIndexDo: [ :pu :i |
+            stream nextPutAll: (self textoParaPowerUp: pu) , ' (Ganado)'.
+            i < pusAdquiridos size ifTrue: [ stream cr ] 
+        ]
+    ].
+    
+    "Obtenemos el color del jugador para el texto"
+    colorJugador := CeldaCuadrilaterosMorph colorParaJugadorId: unJugador id. 
+    
+    morphTexto := TextMorph new 
+        contents: '¡POTENCIADOR ADQUIRIDO!' , Character cr asString , mensajeTexto;
+        font: (TextStyle default fontOfSize: 36);
+        color: colorJugador; 
+        yourself.
+        
+    "2. Crear el Overlay: Calculamos el rectángulo blanco centrado"
+    rectObjetivo := (self bounds center - (200@150)) extent: (400@300).
+    
+    morphOverlay := Morph new
+        color: Color white;
+        borderWidth: 2; 
+        borderColor: Color black;
+        yourself.
+        
+    "3. Asignar Bounds y Centrar"
+    morphOverlay bounds: rectObjetivo. 
+    
+    morphOverlay addMorph: morphTexto.
+    morphTexto center: morphOverlay bounds center.
+    
+    self addMorph: morphOverlay.
+    self world displayWorld. 
+    
+    "4. Pausar el hilo de ejecución por 1.5 segundos"
+    (Delay forSeconds: 1.5) wait.
+    
+    "5. Eliminar el overlay"
+    self removeMorph: morphOverlay.
+    self world displayWorld.
+    
+    self panelInfo changed.
+]
+
+{ #category : #events }
+VentanaJuegoCuadrilateros >> accionSaltarTurno [
+    "Lógica al presionar el botón de saltar turno"
+    
+    self ejecutarSaltarTurno
+]
+
+{ #category : #stepping }
+VentanaJuegoCuadrilateros >> paso [
+    "En cada ciclo del reloj, actualizamos la posición del fantasma"
+    self actualizarPosicionFantasma.
+]
+
+{ #category : #stepping }
+VentanaJuegoCuadrilateros >> tiempoPaso [
+    ^ 20
+]
+
+{ #category : #utilities }
+VentanaJuegoCuadrilateros >> textoParaPowerUp: unPowerUp [ 
+    "Retorna una descripción en texto para un PowerUp activo."
+    (unPowerUp isKindOf: PowerUpMasUno) ifTrue: [ ^ '¡Más 1 en siguiente tirada! :) ' ].
+    (unPowerUp isKindOf: PowerUpMenosUno) ifTrue: [ ^ '¡Menos 1 en siguiente tirada! :O' ].
+    (unPowerUp isKindOf: PowerUpTiradaBaja) ifTrue: [ ^ '¡Próxima tirada obtendrá lowroll!' ].
+    (unPowerUp isKindOf: PowerUpTiradaAlta) ifTrue: [ ^ 'Próxima tirada obtendrá high!' ].
+    (unPowerUp isKindOf: PowerUpBloqueAleatorio) ifTrue: [ ^ '¡Bloque Aleatorio Extra!' ].
+    (unPowerUp isKindOf: PowerUpVidaExtra) ifTrue: [ ^ '¡+1 Vida!' ].
+    (unPowerUp isKindOf: PowerUpBloqueoTurno) ifTrue: [ ^ 'Bloqueo de Turno (Enemigo)' ].
+    ^ 'Potenciador Desconocido'
+]
+
+{ #category : #'game logic' }
+VentanaJuegoCuadrilateros >> actualizarVista [
+    | contenido stringJugador |
+    
+    "Actualizar cada celda"
+    tableroMorph submorphs do: [ :m |
+        (m isKindOf: CeldaCuadrilaterosMorph) ifTrue: [
+            contenido := juego tablero contenidoEn: (m columna @ m fila).
+            m actualizarEstadoDesde: contenido.
+        ].
+    ].
+
+    "--- Actualizar Panel de Estadísticas de Jugadores ---"
+    panelEstadisticas removeAllMorphs.
+    juego jugadores do: [ :p |
+        stringJugador := String streamContents: [ :stream |
+            stream 
+                nextPutAll: 'JUGADOR ', p id asString;
+                nextPutAll: ' (';
+                nextPutAll: p obtenerVidas asString;
+                nextPutAll: ' Vidas) | Área: ';
+                nextPutAll: (p obtenerAreaAbarcada printShowingDecimalPlaces: 2). 
+        ].
+        panelEstadisticas addMorph: (StringMorph new contents: stringJugador).
+    ].
+    "----------------------------------------------------------"
+
+    "Actualizar Etiquetas de Turno"
+    labelDados contents: 'JUGADOR ', juego jugadorActual id asString, 
+                        ' | Dados: ', tiradaActual x asString, ' x ', tiradaActual y asString.
+]
+
+{ #category : #events }
+VentanaJuegoCuadrilateros >> actualizarPosicionFantasma [
+    "Busca la posición actual del mouse y actualiza el fantasma"
+    | posicionMouseGlobal puntoLocal columna fila targetX targetY |
+    
+    juego esJuegoTerminado ifTrue: [ ^ self ].
+    fantasmaMorph ifNil: [ ^ self ].
+    
+    "1. Obtenemos la posición del mouse directamente de la 'Mano' activa"
+    posicionMouseGlobal := self activeHand position.
+    
+    "2. Solo movemos si el mouse está DENTRO del tablero"
+    (tableroMorph containsPoint: posicionMouseGlobal) ifFalse: [ ^ self ].
+    
+    "3. Matemática de coordenadas"
+    puntoLocal := posicionMouseGlobal - tableroMorph position.
+    
+    columna := (puntoLocal x / tamCelda) floor.
+    fila := (puntoLocal y / tamCelda) floor.
+    
+    targetX := columna * tamCelda.
+    targetY := fila * tamCelda.
+    
+    "4. Mover el fantasma"
+    fantasmaMorph position: tableroMorph position + (targetX @ targetY).
+]
+
+{ #category : #drawing }
+VentanaJuegoCuadrilateros >> actualizarTamanioFantasma [
+    "Si el fantasma existe, actualizamos su tamaño (Ancho de dados * celda)"
+    fantasmaMorph ifNotNil: [
+        fantasmaMorph extent: (tiradaActual x * tamCelda) @ (tiradaActual y * tamCelda).
+    ].
+]
+
+{ #category : #stepping }
+VentanaJuegoCuadrilateros >> quierePasos [
+    ^ true
+]
