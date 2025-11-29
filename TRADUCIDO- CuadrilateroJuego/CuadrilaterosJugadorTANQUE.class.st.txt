@@ -1,0 +1,24 @@
+"
+Subclase de jugador
+--TANQUE--
+*Tiene mas vida (5)
+*Acumula un menor puntaje respecto al area cubierta (80%)
+"
+Class {
+	#name : #JugadorCuadrilaterosTanque,
+	#superclass : #JugadorCuadrilateros,
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #acccessing }
+JugadorCuadrilaterosTanque >> agregarArea: unEntero [
+    "Al tener mas vida, el tanque gana menos puntaje respecto al area cubierta."
+    areaAbarcada := areaAbarcada + (unEntero * 0.80).
+]
+
+{ #category : #initialization }
+JugadorCuadrilaterosTanque >> inicializar [
+    super inicializar.
+    "Inicia con 5 vidas (3 base + 2 extra)"
+    vidas := 5.
+]

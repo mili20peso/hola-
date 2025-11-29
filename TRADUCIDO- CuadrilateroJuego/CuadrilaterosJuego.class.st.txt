@@ -1,0 +1,185 @@
+"
+Clase contenedora del juego, controla el flujo del mismo y contiene las clases principales (1 a 4 jugadores, tablero y dado)
+"
+Class {
+	#name : #JuegoCuadrilateros,
+	#superclass : #Object,
+	#instVars : [
+		'tablero',               "Anteriormente 'board'"
+		'jugadores',             "Anteriormente 'players'"
+		'dado',                  "Anteriormente 'dice'"
+		'indiceJugadorActual',   "Anteriormente 'currentPlayerIndex'"
+		'juegoTerminado'         "Anteriormente 'isGameOver'"
+	],
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #'control flow instructions' }
+JuegoCuadrilateros >> intentarColocarFigura: dimensionesPunto en: puntoOrigen [ 
+    "Intenta colocar la figura. Retorna booleano si pudo o no"
+    | jugador exito potenciadoresAdquiridos | 
+    jugador := self jugadorActual.
+    
+    exito := tablero puedeColocarFigura: puntoOrigen 
+                     ancho: dimensionesPunto x 
+                     alto: dimensionesPunto y 
+                     jugador: jugador.
+
+    exito ifTrue: [ 
+        "Capturamos los PowerUps y marcamos el tablero"
+        potenciadoresAdquiridos := tablero colocarFigura: puntoOrigen 
+              ancho: dimensionesPunto x 
+              alto: dimensionesPunto y 
+              jugador: jugador. 
+
+        "Activamos PowerUps adquiridos"
+        potenciadoresAdquiridos do: [ :powerUp |
+            powerUp activateOn: jugador game: self. 
+        ].].
+        
+    ^ exito
+]
+
+{ #category : #accesing }
+JuegoCuadrilateros >> tablero [
+    ^ tablero
+]
+
+{ #category : #accesing }
+JuegoCuadrilateros >> jugadorActual [
+    "Devuelve el Jugador al que le toca ahora"
+    ^ jugadores at: indiceJugadorActual.
+]
+
+{ #category : #accesing }
+JuegoCuadrilateros >> obtenerGanador [
+    "Realiza un ordenamiento para poner como primer elemento el jugador con mas puntos."
+    ^ (jugadores asSortedCollection: [ :a :b |
+        (a areaCovered > b areaCovered) or: [
+            (a areaCovered = b areaCovered) and: [ a figuresPlaced > b figuresPlaced ]
+        ] "Si tienen los mismos puntos ordena segun figuras colocadas como desempate."
+    ]) asArray first. "asArray para que entienda first"
+
+]
+
+{ #category : #initialization }
+JuegoCuadrilateros >> inicializarConClasesJugador: clasesJugador tamanioTablero: tamanio [
+	| jugador nuevo startPos |
+	self initialize.
+	tablero := TableroCuadrilateros new.
+	tablero inicializarTamanio: tamanio.
+	dado := DadoCuadrilateros new.
+	juegoTerminado := false.
+	indiceJugadorActual := 1.
+	jugadores := OrderedCollection new.
+	
+	clasesJugador
+		withIndexDo: [ :claseJugador :i | 
+			jugador := claseJugador new.
+			jugador id: i.
+			jugadores add: jugador ].
+		
+		"Empieza a colocar a cada jugador en una esquina segun la cantidad que exista."
+	jugadores size >= 1
+		ifTrue: [ tablero
+				colocarFigura: 1 @ 1
+				ancho: 1
+				alto: 1
+				jugador: (jugadores at: 1) ].
+	jugadores size >= 2
+		ifTrue: [ startPos := tamanio @ tamanio.
+			tablero
+				colocarFigura: startPos
+				ancho: 1
+				alto: 1
+				jugador: (jugadores at: 2) ].
+	jugadores size >= 3
+		ifTrue: [ startPos := tamanio @ 1.
+			tablero
+				colocarFigura: startPos
+				ancho: 1
+				alto: 1
+				jugador: (jugadores at: 3) ].
+	jugadores size = 4
+		ifFalse: [ ^ self ].
+	startPos := 1 @ tamanio.
+	tablero
+		colocarFigura: startPos
+		ancho: 1
+		alto: 1
+		jugador: (jugadores at: 4)
+]
+
+{ #category : #accesing }
+JuegoCuadrilateros >> esJuegoTerminado [
+    ^ juegoTerminado
+]
+
+{ #category : #'control flow instructions' }
+JuegoCuadrilateros >> siguienteTurno [
+    "Avanza al siguiente jugador, saltando a los muertos y a los BLOQUEADOS"
+    | siguienteJugador |
+    
+    "1. Verificar si el juego terminó"
+    (jugadores select: [:j | j isAlive]) isEmpty ifTrue: [ 
+        juegoTerminado := true. 
+        ^ self 
+    ].
+    
+    "CRÍTICO: Limpiar efectos de turno del jugador que acaba de terminar"
+    self jugadorActual clearTurnEffects.
+
+    "2. Avanzar el índice"
+    indiceJugadorActual := (indiceJugadorActual \\ jugadores size) + 1.
+    siguienteJugador := self jugadorActual.
+
+    "--- LÓGICA DE SALTO ---"
+
+    "3. CASO A: El jugador está MUERTO"
+    siguienteJugador isAlive ifFalse: [ 
+        ^ self siguienteTurno "Saltamos al siguiente"
+    ].
+
+    "4. CASO B: El jugador está VIVO pero BLOQUEADO"
+    (siguienteJugador hasPowerUp: PowerUpBlockTurn) ifTrue: [
+        "Le quitamos el bloqueo (se consume)"
+        siguienteJugador activeEffects removeAllSuchThat: [:e |
+            e isKindOf: PowerUpBlockTurn].
+        
+        Transcript show: 'Saltando turno de Jugador ', siguienteJugador id asString; cr.
+        ^ self siguienteTurno "Recursividad: Lo saltamos y buscamos al siguiente"
+    ].
+
+    "5. CASO C: Jugador válido. Comienza su turno."
+    
+    siguienteJugador recordTurn.
+    
+    (3 atRandom) = 1 ifTrue: [ tablero generarPotenciadorAleatorio ].
+	"Generar PowerUp en el mapa (33%)"
+]
+
+{ #category : #control }
+JuegoCuadrilateros >> jugadorNoPuedeMover [
+    "El jugador pierde una vida y se pasa el turno"
+    self jugadorActual loseLife.
+    self siguienteTurno.
+]
+
+{ #category : #accesing }
+JuegoCuadrilateros >> jugadores [
+    ^ jugadores
+]
+
+{ #category : #'control flow instructions' }
+JuegoCuadrilateros >> tirarDadoJugadorActual [
+    | jugador resultado |
+    jugador := self jugadorActual.
+    
+    "Ejecuta la tirada, si tiene powerups los usa. Se usa rollDiceWith: que delega la configuracion"
+    resultado := jugador rollDiceWith: dado. 
+    
+    "NOTA: La limpieza de efectos de turno (ej: +1) se hace al inicio de siguienteTurno,
+     por eso no se limpia aquí."
+
+    ^ resultado
+]

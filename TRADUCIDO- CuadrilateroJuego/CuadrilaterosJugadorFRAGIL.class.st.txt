@@ -1,0 +1,24 @@
+"
+Subclase de jugador
+--FRAGIL--
+*Tiene una sola vida
+*Acumula un puntaje mayor respecto a su area cubierta (125%)
+"
+Class {
+	#name : #JugadorCuadrilaterosFragil,
+	#superclass : #JugadorCuadrilateros,
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #accesing }
+JugadorCuadrilaterosFragil >> agregarArea: unEntero [ 
+    "Aplica el multiplicador de 1.25 al área o puntaje."
+    areaAbarcada := areaAbarcada + (unEntero * 1.25).
+]
+
+{ #category : #initialization }
+JugadorCuadrilaterosFragil >> inicializar [
+    super inicializar.
+    "Inicia con solo una vida"
+    vidas := 1.
+]

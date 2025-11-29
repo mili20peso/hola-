@@ -1,0 +1,212 @@
+"
+Clase tablero, existe una por partida, tiene hasta 3 tamaños distintos y se encarga de la logica de colocado de figuras, ademas de la generacion y colocacion de potenciadores
+"
+Class {
+	#name : #TableroCuadrilateros,
+	#superclass : #Object,
+	#instVars : [
+		'matriz',   "Anteriormente 'grid'"
+		'filas',    "Anteriormente 'rows'"
+		'columnas'  "Anteriormente 'columns'"
+	],
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #initialization }
+TableroCuadrilateros >> puedeColocarFigura: puntoOrigen ancho: unAncho alto: unAlto jugador: unJugador [
+    "Valida límites, superposición y adyacencia"
+    
+    | startX startY endX endY contenidoCelda |
+    startX := puntoOrigen x.
+    startY := puntoOrigen y.
+    endX := startX + unAncho - 1.
+    endY := startY + unAlto - 1.
+
+    "Validar Límites"
+    ((self esCoordenadaValida: puntoOrigen) and: [ self esCoordenadaValida: endX@endY ]) 
+        ifFalse: [ ^ false ].
+
+    "Validar Superposición"  
+
+    startX to: endX do: [ :x |
+        startY to: endY do: [ :y |
+            contenidoCelda := matriz at: y at: x.
+            
+            contenidoCelda ifNotNil: [
+                
+                "Si es un PowerUp, siempre se puede pisar"
+                (contenidoCelda isKindOf: CuadrilaterosPowerUp) 
+                    ifFalse: [
+                        "Si NO es un PowerUp, esta ocupado."
+                         ^ false ]
+                    ].
+            ].
+        ].
+
+    "Validar Adyacencia"
+    ^ self verificarAdyacenciaPara: puntoOrigen ancho: unAncho alto: unAlto jugador: unJugador.
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> verificarAdyacenciaPara: puntoOrigen ancho: unAncho alto: unAlto jugador: unJugador [
+    "Revisa si existe adyacencia entre las figuras del jugador y esta nueva figura."
+    
+    | startX startY endX endY vecinos |
+    startX := puntoOrigen x.
+    startY := puntoOrigen y.
+    endX := startX + unAncho - 1.
+    endY := startY + unAlto - 1.
+
+
+    "Recorremos toda la figura (no es 100% eficiente pero es poco el trabajo extra)"
+    startX to: endX do: [ :x |
+        startY to: endY do: [ :y |
+            "Para cada celda, miramos sus 4 vecinos (Arriba, Abajo, Izq, Der)"
+            vecinos := { (x@y) + (0@1) . (x@y) - (0@1) . (x@y) + (1@0) . (x@y) - (1@0) }.
+            
+            vecinos do: [ :n |
+                (self esCoordenadaValida: n) ifTrue: [
+                    "Si un vecino tiene el ID del jugador, es válido"
+                    ((self contenidoEn: n) = unJugador id) ifTrue: [ ^ true ].
+						  "Con encontrar uno sale directamente devolviendo true"
+                ].
+            ].
+        ].
+    ].
+    ^ false
+]
+
+{ #category : #accesing }
+TableroCuadrilateros >> obtenerColumnas [
+    "Devuelve la cantidad de columnas del tablero"
+    ^ columnas
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> contenidoEn: unPunto [
+    "Devuelve el contenido de la celda: nil, un ID de jugador o un PowerUp"
+    (self esCoordenadaValida: unPunto) 
+        ifTrue: [ ^ matriz at: unPunto y at: unPunto x ] 
+        ifFalse: [ ^ nil ].
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> inicializarTamanio: unEntero [
+    "Crea un tablero cuadrado de el valor de entrada tanto de alto como ancho.
+     Puede ser 16, 20 o 24 según la eleccion."
+    
+    self initialize.
+    filas := unEntero.
+    columnas := unEntero.
+    
+    "Creamos una Matriz vacía"
+    matriz := Array2D new: filas tabulate: [ :r :c | nil ].
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> esCoordenadaValida: unPunto [
+    "Verifica que el punto x y esté dentro del tablero"
+    ^ (unPunto x between: 1 and: columnas) and: [ unPunto y between: 1 and: filas ]
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> colocarBloqueAleatorioPara: unJugador [
+    "Busca una celda vacía de forma aleatoria y se la asigna al jugador.
+     Si el azar falla muchas veces, busca linealmente."
+    
+    | x y intentos maxIntentos |
+    
+    maxIntentos := 50. "Intentamos 50 veces encontrar un lugar al azar"
+    intentos := 0.
+    
+    "INTENTO ALEATORIO"
+    [ intentos < maxIntentos ] whileTrue: [
+        x := (1 to: columnas) atRandom.
+        y := (1 to: filas) atRandom.
+        
+        "Si la celda es nil, la ocupamos y terminamos"
+        (matriz at: y at: x) isNil ifTrue: [
+            matriz at: y at: x put: unJugador id.
+            unJugador addArea: 1.
+            ^ self "Salimos del método"
+        ].
+        
+        intentos := intentos + 1.
+    ].
+
+    "INTENTO LINEAL"
+    "Si el azar falla, para garantizar que el poder funcione, recorremos todo linealmente."
+    
+    1 to: filas do: [ :r |
+        1 to: columnas do: [ :c |
+            (matriz at: r at: c) isNil ifTrue: [
+                matriz at: r at: c put: unJugador id.
+                unJugador addArea: 1.
+                ^ self "Encontrado por búsqueda lineal"
+            ].
+        ].
+    ].
+    
+    "Si llega hasta esta instancia, el tablero está 100% lleno y no se hace nada."
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> colocarFigura: puntoOrigen ancho: unAncho alto: unAlto jugador: unJugador [ 
+    "Dibuja la figura en el tablero, consume potenciadores y actualiza el puntaje"
+    
+    | startX startY endX endY contenidoCelda potenciadoresAdquiridos |
+    potenciadoresAdquiridos := OrderedCollection new. "Lista para guardar potenciadores"
+    startX := puntoOrigen x.
+    startY := puntoOrigen y.
+    endX := startX + unAncho - 1.
+    endY := startY + unAlto - 1.
+    
+    startX to: endX do: [ :x |
+        startY to: endY do: [ :y |
+            contenidoCelda := matriz at: y at: x.
+            
+            "Nill no puede procesar isKindOf, por lo que creamos una guarda"
+            contenidoCelda ifNotNil: [ 
+                (contenidoCelda isKindOf: CuadrilaterosPowerUp) ifTrue: [
+                    potenciadoresAdquiridos add: contenidoCelda.
+                ]
+            ].
+            
+            "Marcamos la celda con el ID del jugador"
+            matriz at: y at: x put: unJugador id.
+        ].
+    ].
+
+    unJugador addArea: (unAncho * unAlto).
+    unJugador recordFigurePlaced.
+
+    ^ potenciadoresAdquiridos "Devolvemos los potenciadores encontrados"
+
+]
+
+{ #category : #accesing }
+TableroCuadrilateros >> obtenerFilas [
+    "Devuelve la cantidad de filas del tablero"
+    ^ filas
+]
+
+{ #category : #initialization }
+TableroCuadrilateros >> generarPotenciadorAleatorio [
+    "Intenta colocar un PowerUp en una celda vacía"
+    | r c intentos maxIntentos |
+
+    intentos := 0.
+    maxIntentos := 20. "Para evitar bucles infinitos, establecemos un maximo de intentos"
+    
+    [ intentos < maxIntentos ] whileTrue: [
+        r := (1 to: filas) atRandom.
+        c := (1 to: columnas) atRandom.
+        
+        (matriz at: r at: c) isNil ifTrue: [
+            "Si está vacío, ponemos un PowerUp random"
+            matriz at: r at: c put: (CuadrilaterosPowerUp randomSubclass new).
+            ^ self "Salimos del método"
+        ].
+        intentos := intentos + 1.
+    ].
+]

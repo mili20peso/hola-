@@ -1,0 +1,20 @@
+"
+Este potenciador al ser recogido genera una figura 1x1 en cualquier lugar del mapa para el jugador que lo obtiene
+"
+Class {
+	#name : #PowerUpBloqueAleatorio,
+	#superclass : #PotenciadorCuadrilateros,
+	#category : #'Cuadrilateros-Juego'
+}
+
+{ #category : #activation }
+PowerUpBloqueAleatorio >> activarEn: unJugador juego: unJuego [
+    unJuego tablero colocarBloqueAleatorioPara: unJugador. 
+    unJugador agregarPotenciador: self.
+]
+
+{ #category : #accessing }
+PowerUpBloqueAleatorio >> esEfectoInstantaneo [
+    "Permite que la interfaz de usuario sepa que este PowerUp debe eliminarse inmediatamente después de su activación."
+    ^ true
+]
